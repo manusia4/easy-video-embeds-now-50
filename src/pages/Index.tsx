@@ -1,6 +1,8 @@
 
 import React from 'react';
 import EmbedGenerator from '@/components/EmbedGenerator';
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 const Index = () => {
   return (
@@ -14,6 +16,14 @@ const Index = () => {
       </header>
       
       <main className="container mx-auto py-8 px-4">
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4 mr-2" />
+          <AlertTitle>Informasi Penting</AlertTitle>
+          <AlertDescription>
+            Pastikan URL video Anda valid dan dapat diakses secara publik. Video dari sumber yang terproteksi mungkin tidak dapat diputar.
+          </AlertDescription>
+        </Alert>
+        
         <EmbedGenerator />
       </main>
       

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { 
@@ -34,6 +35,7 @@ const VideoPlayer: React.FC = () => {
   const [videoTitle, setVideoTitle] = useState<string>("");
   const [videoId, setVideoId] = useState<string>("");
   const [retryCount, setRetryCount] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string>("");
   
   // Handle video source from URL parameter
   useEffect(() => {
@@ -78,16 +80,19 @@ const VideoPlayer: React.FC = () => {
         
         setVideoTitle(data.title);
         
+        // Add timestamp and random token to video URL to prevent caching
+        const timestamp = Date.now();
+        const randomToken = Math.random().toString(36).substring(2, 15);
+        const obfuscatedUrl = `${data.video_url}?t=${timestamp}&token=${randomToken}`;
+        
+        setVideoUrl(obfuscatedUrl);
+        console.log("Setting video URL:", obfuscatedUrl);
+        
         if (videoRef.current) {
           // Reset states when loading a new video
           setCurrentTime(0);
           setDuration(0);
           setIsPlaying(false);
-          
-          // Add timestamp and random token to video URL to prevent caching
-          const timestamp = Date.now();
-          const randomToken = Math.random().toString(36).substring(2, 15);
-          const obfuscatedUrl = `${data.video_url}?t=${timestamp}&token=${randomToken}`;
           
           videoRef.current.src = obfuscatedUrl;
           videoRef.current.load();
@@ -103,6 +108,19 @@ const VideoPlayer: React.FC = () => {
     
     fetchVideo();
   }, [location.search, retryCount]);
+
+  // Try to load video when URL changes
+  useEffect(() => {
+    if (videoUrl && videoRef.current) {
+      try {
+        videoRef.current.src = videoUrl;
+        videoRef.current.load();
+        console.log("Explicitly loading video with URL:", videoUrl);
+      } catch (err) {
+        console.error("Error setting video source:", err);
+      }
+    }
+  }, [videoUrl]);
 
   // Add event listeners to video element
   useEffect(() => {
@@ -131,6 +149,9 @@ const VideoPlayer: React.FC = () => {
 
     const handleError = (e: Event) => {
       console.error("Video error:", video.error?.message || "Unknown error");
+      console.error("Network state:", video.networkState);
+      console.error("Ready state:", video.readyState);
+      
       setError("Gagal memuat video");
       setIsLoading(false);
       toast.error("Gagal memuat video");
@@ -196,7 +217,7 @@ const VideoPlayer: React.FC = () => {
       video.removeEventListener("waiting", handleWaiting);
       video.removeEventListener("canplay", handleCanPlay);
       video.removeEventListener("contextmenu", handleContextMenu);
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, [isPlaying]);
 
@@ -237,6 +258,14 @@ const VideoPlayer: React.FC = () => {
     };
   }, []);
 
+  // Attempt to handle the "crossorigin" attribute and CORS issues
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.crossOrigin = "anonymous";
+      console.log("Set crossOrigin to anonymous");
+    }
+  }, []);
+
   const togglePlay = () => {
     if (!videoRef.current || error) return;
     
@@ -251,7 +280,7 @@ const VideoPlayer: React.FC = () => {
           playPromise.catch((err) => {
             console.error("Play failed:", err);
             setIsPlaying(false);
-            setError("Failed to play video");
+            setError("Gagal memutar video. Silahkan coba lagi.");
             toast.error("Gagal memutar video");
           });
         }
@@ -345,6 +374,7 @@ const VideoPlayer: React.FC = () => {
         onClick={togglePlay}
         playsInline
         controlsList="nodownload"
+        preload="auto"
       />
       
       {/* Loading Overlay */}

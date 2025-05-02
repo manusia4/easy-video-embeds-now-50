@@ -1,12 +1,26 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import React from 'react';
+import EmbedGenerator from '@/components/EmbedGenerator';
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow">
+        <div className="container mx-auto px-4 py-6">
+          <h1 className="text-3xl font-bold text-gray-900">Easy Video Embeds</h1>
+          <p className="text-gray-600 mt-2">Embed MP4 videos with ease on your website</p>
+        </div>
+      </header>
+      
+      <main className="container mx-auto py-8 px-4">
+        <EmbedGenerator />
+      </main>
+      
+      <footer className="bg-white border-t mt-10 py-6">
+        <div className="container mx-auto px-4 text-center text-gray-500">
+          &copy; {new Date().getFullYear()} Easy Video Embeds
+        </div>
+      </footer>
     </div>
   );
 };

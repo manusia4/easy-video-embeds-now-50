@@ -18,7 +18,7 @@ const Index = () => {
       
       <footer className="bg-white border-t mt-10 py-6">
         <div className="container mx-auto px-4 text-center text-gray-500">
-          &copy; {new Date().getFullYear()} Easy Video Embeds
+          &copy; {new Date().getFullYear()} Easy Video Embeds - Aman & Terproteksi
         </div>
       </footer>
     </div>

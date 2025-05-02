@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 const VideoPlayer: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const location = useLocation();
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -31,7 +32,8 @@ const VideoPlayer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [videoTitle, setVideoTitle] = useState<string>("");
-
+  const [videoId, setVideoId] = useState<string>("");
+  
   // Handle video source from URL parameter
   useEffect(() => {
     const fetchVideo = async () => {
@@ -48,6 +50,9 @@ const VideoPlayer: React.FC = () => {
           setIsLoading(false);
           return;
         }
+        
+        // Set video ID for randomization
+        setVideoId(videoCode);
         
         // Ambil informasi video dari Supabase berdasarkan short_code
         const { data, error: fetchError } = await supabase
@@ -78,7 +83,12 @@ const VideoPlayer: React.FC = () => {
           setDuration(0);
           setIsPlaying(false);
           
-          videoRef.current.src = data.video_url;
+          // Add timestamp and random token to video URL to prevent caching
+          const timestamp = Date.now();
+          const randomToken = Math.random().toString(36).substring(2, 15);
+          const obfuscatedUrl = `${data.video_url}?t=${timestamp}&token=${randomToken}`;
+          
+          videoRef.current.src = obfuscatedUrl;
           videoRef.current.load();
           console.log("Loading video:", data.title);
         }
@@ -141,6 +151,12 @@ const VideoPlayer: React.FC = () => {
       setIsLoading(false);
     };
 
+    // Add protection against right-click to prevent easy downloading
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
     // Register all event listeners
     video.addEventListener("timeupdate", handleTimeUpdate);
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -151,6 +167,7 @@ const VideoPlayer: React.FC = () => {
     video.addEventListener("pause", handlePause);
     video.addEventListener("waiting", handleWaiting);
     video.addEventListener("canplay", handleCanPlay);
+    video.addEventListener("contextmenu", handleContextMenu);
 
     // Check for fullscreen changes
     const handleFullscreenChange = () => {
@@ -175,9 +192,47 @@ const VideoPlayer: React.FC = () => {
       video.removeEventListener("pause", handlePause);
       video.removeEventListener("waiting", handleWaiting);
       video.removeEventListener("canplay", handleCanPlay);
+      video.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, [isPlaying]);
+
+  // Add additional protection against downloading
+  useEffect(() => {
+    const video = videoRef.current;
+    const container = videoContainerRef.current;
+    
+    if (!video || !container) return;
+    
+    // Modify video element to make it harder to extract source
+    Object.defineProperty(video, 'src', {
+      get: function() {
+        return '';
+      }
+    });
+    
+    // Disable picture-in-picture
+    video.disablePictureInPicture = true;
+    
+    // Add CSS to prevent selection
+    const style = document.createElement('style');
+    style.textContent = `
+      video::-internal-media-controls-download-button {
+        display: none !important;
+      }
+      video::-webkit-media-controls-enclosure {
+        overflow: hidden !important;
+      }
+      video::-webkit-media-controls-panel {
+        width: calc(100% + 30px) !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const togglePlay = () => {
     if (!videoRef.current || error) return;
@@ -274,21 +329,13 @@ const VideoPlayer: React.FC = () => {
       onMouseMove={() => setShowControls(true)}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
-      {/* Video Title */}
-      {videoTitle && (
-        <div className="absolute top-4 left-0 right-0 z-20 text-center">
-          <h1 className="text-white text-xl font-bold bg-black/50 inline-block px-4 py-2 rounded-md">
-            {videoTitle}
-          </h1>
-        </div>
-      )}
-      
       {/* Video Element */}
       <video
         ref={videoRef}
         className="w-full h-full max-w-full max-h-full"
         onClick={togglePlay}
         playsInline
+        controlsList="nodownload"
       />
       
       {/* Loading Overlay */}

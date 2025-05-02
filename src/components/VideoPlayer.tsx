@@ -28,10 +28,12 @@ const VideoPlayer: React.FC = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const videoSrc = urlParams.get("src");
-
+    
     if (videoSrc && videoRef.current) {
-      videoRef.current.src = videoSrc;
+      // Ensure we're decoding the URL before setting it
+      videoRef.current.src = decodeURIComponent(videoSrc);
       videoRef.current.load();
+      console.log("Video source set:", videoRef.current.src);
     }
 
     const timer = setTimeout(() => {
@@ -51,6 +53,7 @@ const VideoPlayer: React.FC = () => {
 
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
+      console.log("Video metadata loaded, duration:", video.duration);
     };
 
     const handleEnded = () => {
@@ -61,10 +64,17 @@ const VideoPlayer: React.FC = () => {
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
     video.addEventListener("ended", handleEnded);
 
+    // Check for fullscreen changes
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
     return () => {
       video.removeEventListener("timeupdate", handleTimeUpdate);
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
       video.removeEventListener("ended", handleEnded);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
 
@@ -74,7 +84,17 @@ const VideoPlayer: React.FC = () => {
     if (isPlaying) {
       videoRef.current.pause();
     } else {
-      videoRef.current.play();
+      const playPromise = videoRef.current.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log("Video playback started successfully");
+          })
+          .catch(error => {
+            console.error("Error playing video:", error);
+          });
+      }
     }
     setIsPlaying(!isPlaying);
   };

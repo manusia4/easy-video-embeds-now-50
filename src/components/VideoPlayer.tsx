@@ -7,11 +7,14 @@ import {
   Volume2, 
   VolumeX, 
   SkipForward, 
-  SkipBack 
+  SkipBack,
+  Maximize,
+  Minimize
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const VideoPlayer: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -24,31 +27,39 @@ const VideoPlayer: React.FC = () => {
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Handle video source from URL parameter
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const videoSrc = urlParams.get("src");
     
-    if (videoSrc && videoRef.current) {
+    if (videoRef.current && videoSrc) {
       try {
-        // Ensure we're decoding the URL before setting it
+        // Reset states when loading a new video
+        setIsLoading(true);
+        setError(null);
+        setCurrentTime(0);
+        setDuration(0);
+        setIsPlaying(false);
+        
         const decodedSrc = decodeURIComponent(videoSrc);
         videoRef.current.src = decodedSrc;
         videoRef.current.load();
-        console.log("Video source set:", decodedSrc);
-      } catch (error) {
-        console.error("Error setting video source:", error);
+        console.log("Loading video from:", decodedSrc);
+      } catch (err) {
+        console.error("Failed to set video source:", err);
+        setError("Failed to load video source");
+        toast.error("Gagal memuat video");
       }
+    } else if (!videoSrc) {
+      setError("No video source provided");
+      toast.error("Tidak ada sumber video");
     }
+  }, [location.search]);
 
-    const timer = setTimeout(() => {
-      if (isPlaying) setShowControls(false);
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [location.search, isPlaying]);
-
+  // Add event listeners to video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -58,18 +69,55 @@ const VideoPlayer: React.FC = () => {
     };
 
     const handleLoadedMetadata = () => {
+      console.log("Video metadata loaded");
       setDuration(video.duration);
-      setVideoLoaded(true);
-      console.log("Video metadata loaded, duration:", video.duration);
+      setIsLoading(false);
+    };
+
+    const handleLoadedData = () => {
+      console.log("Video data loaded, ready to play");
+      setIsLoading(false);
     };
 
     const handleEnded = () => {
       setIsPlaying(false);
+      setCurrentTime(0);
     };
 
+    const handleError = () => {
+      console.error("Video error:", video.error);
+      setError("Failed to play video");
+      setIsLoading(false);
+      toast.error("Gagal memutar video");
+    };
+
+    const handlePlaying = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+    };
+
+    const handleWaiting = () => {
+      setIsLoading(true);
+    };
+
+    const handleCanPlay = () => {
+      setIsLoading(false);
+    };
+
+    // Register all event listeners
     video.addEventListener("timeupdate", handleTimeUpdate);
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    video.addEventListener("loadeddata", handleLoadedData);
     video.addEventListener("ended", handleEnded);
+    video.addEventListener("error", handleError);
+    video.addEventListener("playing", handlePlaying);
+    video.addEventListener("pause", handlePause);
+    video.addEventListener("waiting", handleWaiting);
+    video.addEventListener("canplay", handleCanPlay);
 
     // Check for fullscreen changes
     const handleFullscreenChange = () => {
@@ -77,33 +125,49 @@ const VideoPlayer: React.FC = () => {
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
+    // Auto-hide controls after 3 seconds of inactivity
+    const timer = setTimeout(() => {
+      if (isPlaying) setShowControls(false);
+    }, 3000);
+
+    // Clean up all event listeners
     return () => {
+      clearTimeout(timer);
       video.removeEventListener("timeupdate", handleTimeUpdate);
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.removeEventListener("loadeddata", handleLoadedData);
       video.removeEventListener("ended", handleEnded);
+      video.removeEventListener("error", handleError);
+      video.removeEventListener("playing", handlePlaying);
+      video.removeEventListener("pause", handlePause);
+      video.removeEventListener("waiting", handleWaiting);
+      video.removeEventListener("canplay", handleCanPlay);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, []);
+  }, [isPlaying]);
 
-  const togglePlay = async () => {
-    if (!videoRef.current || !videoLoaded) return;
+  const togglePlay = () => {
+    if (!videoRef.current || error) return;
     
     try {
       if (isPlaying) {
         videoRef.current.pause();
-        setIsPlaying(false);
       } else {
+        // Use the play() Promise API properly
         const playPromise = videoRef.current.play();
         
         if (playPromise !== undefined) {
-          await playPromise;
-          setIsPlaying(true);
-          console.log("Video playback started successfully");
+          playPromise.catch((err) => {
+            console.error("Play failed:", err);
+            setIsPlaying(false);
+            setError("Failed to play video");
+            toast.error("Gagal memutar video");
+          });
         }
       }
-    } catch (error) {
-      console.error("Error toggling play/pause:", error);
-      setIsPlaying(false);
+    } catch (err) {
+      console.error("Error toggling play:", err);
+      toast.error("Gagal memutar video");
     }
   };
 
@@ -131,7 +195,7 @@ const VideoPlayer: React.FC = () => {
   };
 
   const handleSeek = (value: number[]) => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !duration) return;
     
     const seekTime = value[0];
     videoRef.current.currentTime = seekTime;
@@ -162,7 +226,6 @@ const VideoPlayer: React.FC = () => {
         document.exitFullscreen();
       }
     }
-    setIsFullscreen(!isFullscreen);
   };
 
   const formatTime = (time: number) => {
@@ -176,19 +239,49 @@ const VideoPlayer: React.FC = () => {
       ref={videoContainerRef}
       className="relative flex justify-center items-center w-full h-screen bg-black"
       onMouseMove={() => setShowControls(true)}
+      onMouseLeave={() => isPlaying && setShowControls(false)}
     >
+      {/* Video Element */}
       <video
         ref={videoRef}
         className="w-full h-full max-w-full max-h-full"
         onClick={togglePlay}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
+        playsInline
       />
+      
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+          <div className="w-16 h-16 border-4 border-gray-600 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+      
+      {/* Error Message */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
+          <div className="bg-red-900/80 text-white p-4 rounded-md text-center max-w-md">
+            <h3 className="text-xl font-bold mb-2">Kesalahan Video</h3>
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Play Button Overlay (when paused) */}
+      {!isPlaying && !isLoading && !error && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer z-5"
+          onClick={togglePlay}
+        >
+          <div className="rounded-full bg-white/30 p-6 backdrop-blur-sm">
+            <Play className="h-12 w-12 text-white" />
+          </div>
+        </div>
+      )}
       
       {/* Custom Video Controls */}
       <div 
         className={cn(
-          "absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-300",
+          "absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-300 z-10",
           showControls ? "opacity-100" : "opacity-0"
         )}
       >
@@ -268,11 +361,15 @@ const VideoPlayer: React.FC = () => {
             
             <Button 
               variant="ghost" 
-              size="sm" 
-              className="text-white hover:bg-white/20 text-xs ml-2" 
+              size="icon"
+              className="text-white hover:bg-white/20" 
               onClick={toggleFullscreen}
             >
-              {isFullscreen ? "Exit Full" : "Full"}
+              {isFullscreen ? (
+                <Minimize className="h-5 w-5" />
+              ) : (
+                <Maximize className="h-5 w-5" />
+              )}
             </Button>
           </div>
         </div>

@@ -24,16 +24,22 @@ const VideoPlayer: React.FC = () => {
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const videoSrc = urlParams.get("src");
     
     if (videoSrc && videoRef.current) {
-      // Ensure we're decoding the URL before setting it
-      videoRef.current.src = decodeURIComponent(videoSrc);
-      videoRef.current.load();
-      console.log("Video source set:", videoRef.current.src);
+      try {
+        // Ensure we're decoding the URL before setting it
+        const decodedSrc = decodeURIComponent(videoSrc);
+        videoRef.current.src = decodedSrc;
+        videoRef.current.load();
+        console.log("Video source set:", decodedSrc);
+      } catch (error) {
+        console.error("Error setting video source:", error);
+      }
     }
 
     const timer = setTimeout(() => {
@@ -53,6 +59,7 @@ const VideoPlayer: React.FC = () => {
 
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
+      setVideoLoaded(true);
       console.log("Video metadata loaded, duration:", video.duration);
     };
 
@@ -78,25 +85,26 @@ const VideoPlayer: React.FC = () => {
     };
   }, []);
 
-  const togglePlay = () => {
-    if (!videoRef.current) return;
+  const togglePlay = async () => {
+    if (!videoRef.current || !videoLoaded) return;
     
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      const playPromise = videoRef.current.play();
-      
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log("Video playback started successfully");
-          })
-          .catch(error => {
-            console.error("Error playing video:", error);
-          });
+    try {
+      if (isPlaying) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        const playPromise = videoRef.current.play();
+        
+        if (playPromise !== undefined) {
+          await playPromise;
+          setIsPlaying(true);
+          console.log("Video playback started successfully");
+        }
       }
+    } catch (error) {
+      console.error("Error toggling play/pause:", error);
+      setIsPlaying(false);
     }
-    setIsPlaying(!isPlaying);
   };
 
   const toggleMute = () => {

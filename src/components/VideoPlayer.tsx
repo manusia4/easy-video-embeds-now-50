@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { 
@@ -51,7 +52,7 @@ const VideoPlayer: React.FC = () => {
         // Ambil informasi video dari Supabase berdasarkan short_code
         const { data, error: fetchError } = await supabase
           .from('video_links')
-          .select('video_url, title')
+          .select('video_url, title, views')
           .eq('short_code', videoCode)
           .single();
         
@@ -63,10 +64,10 @@ const VideoPlayer: React.FC = () => {
           return;
         }
         
-        // Update view counter
+        // Update view counter - menghindari error jika views tidak ada
         await supabase
           .from('video_links')
-          .update({ views: data.views ? data.views + 1 : 1 })
+          .update({ views: (data.views || 0) + 1 })
           .eq('short_code', videoCode);
         
         setVideoTitle(data.title);

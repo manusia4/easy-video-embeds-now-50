@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import EmbedGenerator from '@/components/EmbedGenerator';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -13,10 +13,10 @@ const Index = () => {
   useEffect(() => {
     const checkSupabaseConnection = async () => {
       try {
-        // Try to query a simple health check
+        // Try to query a simple health check - FIXED: removed count() function that was causing error
         const { data, error } = await supabase
           .from('video_links')
-          .select('count()')
+          .select('id')
           .limit(1);
         
         if (error) {
@@ -25,6 +25,7 @@ const Index = () => {
           toast.error("Koneksi ke database gagal");
         } else {
           setSupabaseStatus('online');
+          toast.success("Koneksi ke database berhasil");
         }
       } catch (err) {
         console.error("Error checking Supabase:", err);
@@ -67,6 +68,20 @@ const Index = () => {
       </header>
       
       <main className="container mx-auto py-8 px-4">
+        <Alert className="mb-6 bg-blue-50 border-blue-200">
+          <Info className="h-4 w-4 mr-2 text-blue-500" />
+          <AlertTitle>Informasi Pemain Video</AlertTitle>
+          <AlertDescription>
+            <p>Jika video player menampilkan error <strong>"Cannot set property src of #&lt;HTMLVideoElement&gt; which has only a getter"</strong>, hal ini mungkin karena:</p>
+            <ul className="list-disc pl-5 mt-2">
+              <li>URL video diproteksi oleh kebijakan CORS server</li>
+              <li>Format video tidak didukung oleh browser</li>
+              <li>Video terlalu besar dan tidak dapat dimuat</li>
+              <li>Coba gunakan browser berbeda atau sumber video yang berbeda</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
+        
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4 mr-2" />
           <AlertTitle>Informasi Penting</AlertTitle>

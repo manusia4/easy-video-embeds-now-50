@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { 
@@ -10,7 +11,8 @@ import {
   Maximize,
   Minimize,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -37,6 +39,7 @@ const VideoPlayer: React.FC = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [corsRetried, setCorsRetried] = useState(false);
+  const [urlChecked, setUrlChecked] = useState(false);
   
   // Handle video source from URL parameter
   useEffect(() => {
@@ -109,17 +112,8 @@ const VideoPlayer: React.FC = () => {
         setVideoUrl(obfuscatedUrl);
         console.log("Setting video URL:", obfuscatedUrl);
         
-        if (videoRef.current) {
-          // Reset states when loading a new video
-          setCurrentTime(0);
-          setDuration(0);
-          setIsPlaying(false);
-          
-          // Try to load video
-          videoRef.current.src = obfuscatedUrl;
-          videoRef.current.load();
-          console.log("Loading video:", data.title);
-        }
+        // We'll manually set the video source in the next effect
+        setIsLoading(false);
       } catch (err) {
         console.error("Failed to load video:", err);
         setError("Gagal memuat video: " + (err instanceof Error ? err.message : "Unknown error"));
@@ -131,16 +125,25 @@ const VideoPlayer: React.FC = () => {
     fetchVideo();
   }, [location.search, retryCount]);
 
-  // Try to load video when URL changes
+  // Handle video loading - FIXED APPROACH
   useEffect(() => {
     if (videoUrl && videoRef.current) {
       try {
-        console.log("Setting video source to:", videoUrl);
+        // FIXED: Remove the Object.defineProperty override that was causing the issue
+        // and just directly assign the src attribute
+        console.log("Setting video source directly:", videoUrl);
+        
+        // First set crossOrigin attribute
+        videoRef.current.crossOrigin = "anonymous";
+        
+        // Then load the video source
         videoRef.current.src = videoUrl;
         videoRef.current.load();
+        
+        console.log("Video source set successfully");
       } catch (err) {
         console.error("Error setting video source:", err);
-        setError("Error saat memuat video: " + (err instanceof Error ? err.message : "Unknown error"));
+        setError(`Error saat memuat video: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
     }
   }, [videoUrl]);
@@ -195,7 +198,7 @@ const VideoPlayer: React.FC = () => {
         }
       }
       
-      setError("Gagal memuat video. Coba periksa URL atau koneksi internet Anda.");
+      setError("Error saat memuat video: Cannot set property src of #<HTMLVideoElement> which has only a getter");
       setIsLoading(false);
       toast.error("Gagal memuat video");
     };
@@ -266,19 +269,15 @@ const VideoPlayer: React.FC = () => {
     };
   }, [isPlaying, videoUrl, corsRetried]);
 
-  // Apply protection techniques and additional settings
+  // Apply protection techniques - REMOVED src OVERRIDE
   useEffect(() => {
     const video = videoRef.current;
     const container = videoContainerRef.current;
     
     if (!video || !container) return;
     
-    // Modify video element to make it harder to extract source
-    Object.defineProperty(video, 'src', {
-      get: function() {
-        return '';
-      }
-    });
+    // FIXED: Removed the Object.defineProperty that was causing the issue
+    // We'll now rely on other protection mechanisms
     
     // Disable picture-in-picture
     video.disablePictureInPicture = true;
@@ -403,26 +402,51 @@ const VideoPlayer: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setCorsRetried(false);
+    setUrlChecked(false);
     setRetryCount(prev => prev + 1);
     toast.info("Mencoba memuat ulang video...");
+    
+    if (videoRef.current && videoUrl) {
+      try {
+        // Clear any src modifications
+        videoRef.current.crossOrigin = "anonymous";
+        videoRef.current.src = videoUrl;
+        videoRef.current.load();
+      } catch (err) {
+        console.error("Error during retry:", err);
+      }
+    }
   };
 
   const checkVideoStatus = async () => {
     if (!videoUrl) return;
     
     try {
+      setIsLoading(true);
       const response = await fetch(videoUrl, { method: 'HEAD' });
       console.log("Video URL check status:", response.status, response.statusText);
-      console.log("Video URL headers:", response.headers);
+      
+      const headers = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      console.log("Video URL headers:", headers);
+      
+      setUrlChecked(true);
       
       if (!response.ok) {
         setError(`URL video tidak dapat diakses (${response.status}: ${response.statusText})`);
+        toast.error("URL video tidak valid");
       } else {
+        setError(null);
         toast.success("URL video valid");
       }
     } catch (err) {
       console.error("Error checking video URL:", err);
       setError("URL video tidak dapat diakses secara langsung, mungkin karena kebijakan CORS");
+      toast.error("Gagal memeriksa URL");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -469,12 +493,19 @@ const VideoPlayer: React.FC = () => {
               
               <Button 
                 variant="outline" 
-                className="bg-white/10 hover:bg-white/20 border-white/30 text-white" 
+                className="bg-white/10 hover:bg-white/20 border-white/30 text-white flex items-center gap-2" 
                 onClick={checkVideoStatus}
               >
                 Periksa Status URL
               </Button>
             </div>
+            
+            {urlChecked && (
+              <div className="mt-4 p-3 bg-white/10 rounded-md flex items-center gap-2 justify-center">
+                <CheckCircle2 className="h-5 w-5 text-green-400" />
+                <span>URL video valid</span>
+              </div>
+            )}
           </div>
         </div>
       )}

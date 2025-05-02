@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { 
@@ -9,7 +8,8 @@ import {
   SkipForward, 
   SkipBack,
   Maximize,
-  Minimize
+  Minimize,
+  AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -33,6 +33,7 @@ const VideoPlayer: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [videoTitle, setVideoTitle] = useState<string>("");
   const [videoId, setVideoId] = useState<string>("");
+  const [retryCount, setRetryCount] = useState(0);
   
   // Handle video source from URL parameter
   useEffect(() => {
@@ -94,13 +95,14 @@ const VideoPlayer: React.FC = () => {
         }
       } catch (err) {
         console.error("Failed to load video:", err);
-        setError("Failed to load video");
+        setError("Gagal memuat video");
         toast.error("Gagal memuat video");
+        setIsLoading(false);
       }
     };
     
     fetchVideo();
-  }, [location.search]);
+  }, [location.search, retryCount]);
 
   // Add event listeners to video element
   useEffect(() => {
@@ -127,16 +129,17 @@ const VideoPlayer: React.FC = () => {
       setCurrentTime(0);
     };
 
-    const handleError = () => {
-      console.error("Video error:", video.error);
-      setError("Failed to play video");
+    const handleError = (e: Event) => {
+      console.error("Video error:", video.error?.message || "Unknown error");
+      setError("Gagal memuat video");
       setIsLoading(false);
-      toast.error("Gagal memutar video");
+      toast.error("Gagal memuat video");
     };
 
     const handlePlaying = () => {
       setIsPlaying(true);
       setIsLoading(false);
+      setError(null); // Clear any previous errors when playback starts
     };
 
     const handlePause = () => {
@@ -322,6 +325,12 @@ const VideoPlayer: React.FC = () => {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const handleRetry = () => {
+    setIsLoading(true);
+    setError(null);
+    setRetryCount(prev => prev + 1);
+  };
+
   return (
     <div 
       ref={videoContainerRef}
@@ -339,7 +348,7 @@ const VideoPlayer: React.FC = () => {
       />
       
       {/* Loading Overlay */}
-      {isLoading && (
+      {isLoading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
           <div className="w-16 h-16 border-4 border-gray-600 border-t-white rounded-full animate-spin" />
         </div>
@@ -348,9 +357,17 @@ const VideoPlayer: React.FC = () => {
       {/* Error Message */}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
-          <div className="bg-red-900/80 text-white p-4 rounded-md text-center max-w-md">
-            <h3 className="text-xl font-bold mb-2">Kesalahan Video</h3>
-            <p>{error}</p>
+          <div className="bg-red-900/90 text-white p-6 rounded-md text-center max-w-md">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-red-200" />
+            <h3 className="text-2xl font-bold mb-3">Kesalahan Video</h3>
+            <p className="text-lg mb-5">{error}</p>
+            <Button 
+              variant="outline" 
+              className="bg-white/10 hover:bg-white/20 border-white/30 text-white" 
+              onClick={handleRetry}
+            >
+              Coba Lagi
+            </Button>
           </div>
         </div>
       )}
@@ -463,6 +480,16 @@ const VideoPlayer: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Toast notification for errors at the bottom */}
+      {error && (
+        <div className="absolute bottom-16 left-0 right-0 mx-auto w-full max-w-md p-2 flex items-center justify-center z-20">
+          <div className="bg-black/75 text-white px-4 py-2 rounded-full flex items-center">
+            <AlertTriangle className="h-4 w-4 mr-2 text-red-400" />
+            <p>Gagal memuat video</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

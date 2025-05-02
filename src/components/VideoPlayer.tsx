@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { 
@@ -15,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const VideoPlayer: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -29,34 +29,66 @@ const VideoPlayer: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [videoTitle, setVideoTitle] = useState<string>("");
 
   // Handle video source from URL parameter
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const videoSrc = urlParams.get("src");
-    
-    if (videoRef.current && videoSrc) {
+    const fetchVideo = async () => {
       try {
-        // Reset states when loading a new video
         setIsLoading(true);
         setError(null);
-        setCurrentTime(0);
-        setDuration(0);
-        setIsPlaying(false);
         
-        const decodedSrc = decodeURIComponent(videoSrc);
-        videoRef.current.src = decodedSrc;
-        videoRef.current.load();
-        console.log("Loading video from:", decodedSrc);
+        const urlParams = new URLSearchParams(location.search);
+        const videoCode = urlParams.get("code");
+        
+        if (!videoCode) {
+          setError("Kode video tidak ditemukan");
+          toast.error("Kode video tidak ditemukan");
+          setIsLoading(false);
+          return;
+        }
+        
+        // Ambil informasi video dari Supabase berdasarkan short_code
+        const { data, error: fetchError } = await supabase
+          .from('video_links')
+          .select('video_url, title')
+          .eq('short_code', videoCode)
+          .single();
+        
+        if (fetchError || !data) {
+          console.error("Error mengambil video:", fetchError);
+          setError("Video tidak ditemukan");
+          toast.error("Video tidak ditemukan");
+          setIsLoading(false);
+          return;
+        }
+        
+        // Update view counter
+        await supabase
+          .from('video_links')
+          .update({ views: data.views ? data.views + 1 : 1 })
+          .eq('short_code', videoCode);
+        
+        setVideoTitle(data.title);
+        
+        if (videoRef.current) {
+          // Reset states when loading a new video
+          setCurrentTime(0);
+          setDuration(0);
+          setIsPlaying(false);
+          
+          videoRef.current.src = data.video_url;
+          videoRef.current.load();
+          console.log("Loading video:", data.title);
+        }
       } catch (err) {
-        console.error("Failed to set video source:", err);
-        setError("Failed to load video source");
+        console.error("Failed to load video:", err);
+        setError("Failed to load video");
         toast.error("Gagal memuat video");
       }
-    } else if (!videoSrc) {
-      setError("No video source provided");
-      toast.error("Tidak ada sumber video");
-    }
+    };
+    
+    fetchVideo();
   }, [location.search]);
 
   // Add event listeners to video element
@@ -241,6 +273,15 @@ const VideoPlayer: React.FC = () => {
       onMouseMove={() => setShowControls(true)}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
+      {/* Video Title */}
+      {videoTitle && (
+        <div className="absolute top-4 left-0 right-0 z-20 text-center">
+          <h1 className="text-white text-xl font-bold bg-black/50 inline-block px-4 py-2 rounded-md">
+            {videoTitle}
+          </h1>
+        </div>
+      )}
+      
       {/* Video Element */}
       <video
         ref={videoRef}

@@ -8,7 +8,7 @@ const Index = () => {
       <header className="bg-white shadow">
         <div className="container mx-auto px-4 py-6">
           <h1 className="text-3xl font-bold text-gray-900">Easy Video Embeds</h1>
-          <p className="text-gray-600 mt-2">Embed MP4 videos with ease on your website</p>
+          <p className="text-gray-600 mt-2">Embed MP4 videos dengan aman untuk website Anda</p>
         </div>
       </header>
       

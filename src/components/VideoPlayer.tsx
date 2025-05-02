@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { 
@@ -10,7 +9,8 @@ import {
   SkipBack,
   Maximize,
   Minimize,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -36,6 +36,7 @@ const VideoPlayer: React.FC = () => {
   const [videoId, setVideoId] = useState<string>("");
   const [retryCount, setRetryCount] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string>("");
+  const [corsRetried, setCorsRetried] = useState(false);
   
   // Handle video source from URL parameter
   useEffect(() => {
@@ -57,33 +58,53 @@ const VideoPlayer: React.FC = () => {
         // Set video ID for randomization
         setVideoId(videoCode);
         
+        console.log("Fetching video with code:", videoCode);
+        
         // Ambil informasi video dari Supabase berdasarkan short_code
         const { data, error: fetchError } = await supabase
           .from('video_links')
           .select('video_url, title, views')
           .eq('short_code', videoCode)
-          .single();
+          .maybeSingle();
         
-        if (fetchError || !data) {
-          console.error("Error mengambil video:", fetchError);
+        if (fetchError) {
+          console.error("Database error:", fetchError);
+          setError("Error database: " + fetchError.message);
+          toast.error("Error database");
+          setIsLoading(false);
+          return;
+        }
+        
+        if (!data) {
+          console.error("Video not found for code:", videoCode);
           setError("Video tidak ditemukan");
           toast.error("Video tidak ditemukan");
           setIsLoading(false);
           return;
         }
         
+        console.log("Video data retrieved:", data);
+        
         // Update view counter - menghindari error jika views tidak ada
-        await supabase
+        const updateResult = await supabase
           .from('video_links')
           .update({ views: (data.views || 0) + 1 })
           .eq('short_code', videoCode);
+          
+        if (updateResult.error) {
+          console.warn("Failed to update view count:", updateResult.error);
+        }
         
-        setVideoTitle(data.title);
+        setVideoTitle(data.title || "Untitled Video");
         
         // Add timestamp and random token to video URL to prevent caching
         const timestamp = Date.now();
         const randomToken = Math.random().toString(36).substring(2, 15);
-        const obfuscatedUrl = `${data.video_url}?t=${timestamp}&token=${randomToken}`;
+        const originalUrl = data.video_url;
+        
+        // Check if URL already has parameters
+        const separator = originalUrl.includes('?') ? '&' : '?';
+        const obfuscatedUrl = `${originalUrl}${separator}t=${timestamp}&token=${randomToken}`;
         
         setVideoUrl(obfuscatedUrl);
         console.log("Setting video URL:", obfuscatedUrl);
@@ -94,13 +115,14 @@ const VideoPlayer: React.FC = () => {
           setDuration(0);
           setIsPlaying(false);
           
+          // Try to load video
           videoRef.current.src = obfuscatedUrl;
           videoRef.current.load();
           console.log("Loading video:", data.title);
         }
       } catch (err) {
         console.error("Failed to load video:", err);
-        setError("Gagal memuat video");
+        setError("Gagal memuat video: " + (err instanceof Error ? err.message : "Unknown error"));
         toast.error("Gagal memuat video");
         setIsLoading(false);
       }
@@ -113,11 +135,12 @@ const VideoPlayer: React.FC = () => {
   useEffect(() => {
     if (videoUrl && videoRef.current) {
       try {
+        console.log("Setting video source to:", videoUrl);
         videoRef.current.src = videoUrl;
         videoRef.current.load();
-        console.log("Explicitly loading video with URL:", videoUrl);
       } catch (err) {
         console.error("Error setting video source:", err);
+        setError("Error saat memuat video: " + (err instanceof Error ? err.message : "Unknown error"));
       }
     }
   }, [videoUrl]);
@@ -148,16 +171,37 @@ const VideoPlayer: React.FC = () => {
     };
 
     const handleError = (e: Event) => {
-      console.error("Video error:", video.error?.message || "Unknown error");
+      console.error("Video error event triggered");
+      if (video.error) {
+        console.error("Video error code:", video.error.code);
+        console.error("Video error message:", video.error.message);
+      }
       console.error("Network state:", video.networkState);
       console.error("Ready state:", video.readyState);
       
-      setError("Gagal memuat video");
+      // If this is a CORS error and we haven't tried the CORS fix yet
+      if (!corsRetried) {
+        console.log("Attempting CORS fix by reloading with crossOrigin attribute");
+        setCorsRetried(true);
+        
+        // Try reloading with crossOrigin attribute
+        video.crossOrigin = "anonymous";
+        
+        // Force reload the video
+        if (videoUrl) {
+          video.src = videoUrl;
+          video.load();
+          return; // Don't set error yet
+        }
+      }
+      
+      setError("Gagal memuat video. Coba periksa URL atau koneksi internet Anda.");
       setIsLoading(false);
       toast.error("Gagal memuat video");
     };
 
     const handlePlaying = () => {
+      console.log("Video started playing");
       setIsPlaying(true);
       setIsLoading(false);
       setError(null); // Clear any previous errors when playback starts
@@ -172,6 +216,7 @@ const VideoPlayer: React.FC = () => {
     };
 
     const handleCanPlay = () => {
+      console.log("Video can play now");
       setIsLoading(false);
     };
 
@@ -217,11 +262,11 @@ const VideoPlayer: React.FC = () => {
       video.removeEventListener("waiting", handleWaiting);
       video.removeEventListener("canplay", handleCanPlay);
       video.removeEventListener("contextmenu", handleContextMenu);
-      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, [isPlaying]);
+  }, [isPlaying, videoUrl, corsRetried]);
 
-  // Add additional protection against downloading
+  // Apply protection techniques and additional settings
   useEffect(() => {
     const video = videoRef.current;
     const container = videoContainerRef.current;
@@ -258,7 +303,7 @@ const VideoPlayer: React.FC = () => {
     };
   }, []);
 
-  // Attempt to handle the "crossorigin" attribute and CORS issues
+  // Setting crossOrigin attribute to handle CORS issues
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.crossOrigin = "anonymous";
@@ -357,7 +402,28 @@ const VideoPlayer: React.FC = () => {
   const handleRetry = () => {
     setIsLoading(true);
     setError(null);
+    setCorsRetried(false);
     setRetryCount(prev => prev + 1);
+    toast.info("Mencoba memuat ulang video...");
+  };
+
+  const checkVideoStatus = async () => {
+    if (!videoUrl) return;
+    
+    try {
+      const response = await fetch(videoUrl, { method: 'HEAD' });
+      console.log("Video URL check status:", response.status, response.statusText);
+      console.log("Video URL headers:", response.headers);
+      
+      if (!response.ok) {
+        setError(`URL video tidak dapat diakses (${response.status}: ${response.statusText})`);
+      } else {
+        toast.success("URL video valid");
+      }
+    } catch (err) {
+      console.error("Error checking video URL:", err);
+      setError("URL video tidak dapat diakses secara langsung, mungkin karena kebijakan CORS");
+    }
   };
 
   return (
@@ -391,13 +457,24 @@ const VideoPlayer: React.FC = () => {
             <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-red-200" />
             <h3 className="text-2xl font-bold mb-3">Kesalahan Video</h3>
             <p className="text-lg mb-5">{error}</p>
-            <Button 
-              variant="outline" 
-              className="bg-white/10 hover:bg-white/20 border-white/30 text-white" 
-              onClick={handleRetry}
-            >
-              Coba Lagi
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button 
+                variant="outline" 
+                className="bg-white/10 hover:bg-white/20 border-white/30 text-white flex items-center gap-2" 
+                onClick={handleRetry}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Coba Lagi
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                className="bg-white/10 hover:bg-white/20 border-white/30 text-white" 
+                onClick={checkVideoStatus}
+              >
+                Periksa Status URL
+              </Button>
+            </div>
           </div>
         </div>
       )}
